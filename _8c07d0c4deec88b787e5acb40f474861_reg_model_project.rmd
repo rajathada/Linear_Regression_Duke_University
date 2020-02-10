@@ -1,0 +1,225 @@
+---
+title: "Modeling and prediction for movies"
+output: 
+  html_document: 
+    fig_height: 4
+    highlight: pygments
+    theme: spacelab
+---
+
+## Setup
+
+### Load packages
+
+```{r load-packages, message = FALSE}
+library(ggplot2)
+library(dplyr)
+library(statsr)
+library(gridExtra)
+library(GGally)
+```
+
+### Load data
+
+
+```{r load-data}
+load("movies.Rdata")
+```
+
+
+
+* * *
+
+## Part 1: Data
+
+The dataset is comprised of 651 randomly sampled movies produced and released before 2016. The data draws from imdb.com and rottentomatoes.com. As this is random sampling, only correlations can be drawn. Because of the randomness of the selection and the size of the dataset, our results can be generalizable.
+
+
+* * *
+
+## Part 2: Research question
+
+Can the number of imdb votes, the audience rating, audience score, and knowledge of whether a movie has won an award or not be useful in predicting the critics' score of a movie?
+
+
+* * *
+
+## Part 3: Exploratory data analysis
+
+Lets first look which all variables are available in the dataset.
+
+```{r}
+names(movies)
+```
+
+Let's create a variable called ```won_award``` with the levels "yes" and "no". If a movie won an award for best director, best actor, best actress, or best picture, the value for ```won_award``` would be "yes".
+
+```{r}
+movies <- movies %>%
+  mutate(won_award = ifelse(best_pic_win=="yes" | best_actor_win=="yes" | best_actress_win=="yes" | best_dir_win=="yes" , "yes", "no"))
+```
+
+
+Now, lets looks in type of Critics and Audience Rating available in the dataset.
+
+```{r}
+unique(movies$critics_rating)
+unique(movies$audience_rating)
+```
+
+Now, let's find out the proportion of critics ratings which are "Certified Fresh" or "Fresh".
+
+```{r}
+nrow(movies[which(movies$critics_rating %in% c("Certified Fresh", "Fresh")), ])/ nrow(movies)
+```
+
+Let's take a look at the proportion of audience_rating that are upright.
+
+```{r}
+nrow(movies[which(movies$audience_rating %in% c("Upright")), ])/ nrow(movies)
+```
+
+
+Lets look how audience score and critics score vary for same movie.
+
+```{r}
+ggplot(movies[1:20,], aes(x=title, y=critics_score, group = 1)) + ylab("Score") +xlab ("Movie_Title") +
+  geom_line(aes(color = "blue")) + geom_point(color = "blue") + 
+  geom_point(aes(x = movies$title[1:20], y = movies$audience_score[1:20]), color = "red") +
+  geom_line(aes(x = movies$title[1:20], y = movies$audience_score[1:20], color = "red")) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_color_manual("Score_Type",values=c(red="red",blue="blue"),labels=c("Critics_Score","Audience_Score"))
+
+```
+
+Now let's take a look at release date of movies.
+
+
+```{r}
+ggplot(movies, aes(x=thtr_rel_month)) + geom_histogram(binwidth = .2) + scale_x_continuous(breaks=seq(1,12,1),lim=c(0,13))
+```
+
+January, June, October, and December have maximum releases. 
+
+Let's take a look at the correlation between the variables ```imdb_rating```, ```imdb_num_votes```, ```critics_rating```, ```critics_score```, ```audience_rating```, and ```audience_score```.
+
+
+```{r, fig.width = 10, fig.height = 10}
+ggpairs(movies, columns=13:18)
+```
+
+We see some clear correlations here. For instance, see the scatter plot between ```critics_score``` and ```audience_score```. This plot gives us a good idea of how these variables interact.
+
+
+* * *
+
+## Part 4: Modeling
+
+* **Using Adjusted R^2^**
+
+I chose a subset of variables with which to work based on my exploratory data analysis. The correlation plot was very informative regarding which variables would inform the model. My response variable will be ```critics_score```. My explanatory variable set will be:
+
+* ```imdb_rating```
+
+* ```imdb_num_votes```
+
+* ```audience_score```
+
+* ```audience_rating```
+
+* ```won_Award```
+
+
+### Methods
+
+#### **Forward selection using adjusted R^2^**
+
+#### Step 1
+
+```{r}
+summary(lm(movies$critics_score ~ movies$imdb_rating))$adj.r.squared 
+summary(lm(movies$critics_score ~ movies$imdb_num_votes))$adj.r.squared 
+summary(lm(movies$critics_score ~ movies$audience_rating))$adj.r.squared 
+summary(lm(movies$critics_score ~ movies$audience_score))$adj.r.squared 
+```
+
+#### Step 2
+
+```{r}
+summary(lm(movies$critics_score ~ movies$imdb_rating + movies$imdb_num_votes))$adj.r.squared 
+summary(lm(movies$critics_score ~ movies$imdb_rating + movies$audience_rating))$adj.r.squared 
+summary(lm(movies$critics_score ~ movies$imdb_rating + movies$audience_score))$adj.r.squared 
+```
+
+#### Step 3
+
+```{r}
+summary(lm(movies$critics_score ~ movies$imdb_rating + movies$audience_score + movies$imdb_num_votes))$adj.r.squared
+summary(lm(movies$critics_score ~ movies$imdb_rating + movies$audience_score + movies$audience_rating))$adj.r.squared
+```
+
+#### Step 4
+
+```{r}
+summary(lm(movies$critics_score ~ movies$imdb_rating + movies$audience_score + movies$imdb_num_votes + movies$audience_rating))$adj.r.squared
+```
+
+
+#### Step 5
+
+```{r}
+summary(lm(movies$critics_score ~ movies$imdb_rating + movies$audience_score + movies$imdb_num_votes + movies$audience_rating + movies$won_award))$adj.r.squared 
+```
+
+We see in step 5 that the addition of the variable ```won_award``` reduces the adjusted R^2^ score, so we will leave it out of the model.
+
+So, our final Model would be as below.
+
+```{r eval=FALSE}
+cs_ar2_final <- lm(critics_score ~ imdb_rating + audience_score + audience_rating + imdb_num_votes, data=movies)
+```
+
+* * *
+
+## Part 5: Prediction
+
+The movie whose ```critics_score``` I will predict is **_Star Trek Beyond_**.
+
+It was released on July 22, 2016. All information is from imdb.com and rottentomatoes.com.
+
+  * ```imdb_num_votes``` = 122567
+  
+  * ```imdb_rating``` = 7.2
+  
+  * ```audience_score``` = 81
+  
+  * ```audience_rating``` = Upright
+
+For reference, ```critics_score``` = 84
+
+First, I'll create the data.frame ```newmovie``` to include the data about _Star Trek Beyond_
+
+```{r}
+newmovie <- data.frame(imdb_rating = 7.2, imdb_num_votes = 122567, audience_score = 81, audience_rating = "Upright")
+```
+
+Now, I will run the predict function.
+
+```{r}
+cs_ar2_final <- lm(critics_score ~ imdb_rating + audience_score + audience_rating + imdb_num_votes, data=movies)
+predict(cs_ar2_final, newmovie, interval = "prediction", level = 0.95)
+```
+
+We predict that this movie would receive a critics' score of 73.09.
+
+We can also see that based on this model, with 95% confidence, a movie (in this case _Star Trek Beyond_) with an ```imdb_rating``` of 7.2, an ```audience_score``` of 81, an ```audience_rating``` of "Upright", and and ```imdb_num_votes``` of 122,567 is expected to receive a critics' score between 43.18 and 100 (score can not exceed 100). 
+
+* * *
+
+## Part 6: Conclusion
+
+Using our model, we predicted a critics' score that reached 87% accuracy. The true score did in fact fall within the 95% confidence interval. The accuracy rating is decent, and could likely be improved.
+
+To improve these results using this model, we would need more observations. To improve the model in general, we would need a greater number of useful variables.
+
+I think many useful questions can be addressed using a similar model. One would be to forecast how much money a movie would make.
